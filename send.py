@@ -1,7 +1,7 @@
 ## Title:       send.py
 ## Author:      Jeroen Venema
 ## Created:     25/10/2022
-## Last update: 29/01/2024
+## Last update: 22/10/2025
 ##
 ## Edited by Steve Lovejoy for linux DTR issue. 
 ##
@@ -15,6 +15,7 @@
 ##            Using defaults as constants.
 ## 11/09/2023 Wait time variable introduced for handling PC serial drivers with low buffer memory
 ## 29/01/2024 OS-specific serial settings to prevent board reset upon opening of serial port
+## 22/10/2025 Removed termios, several issues with MacOS. Tested correct DTR on Win/Linux/MacOS
 
 DEFAULT_START_ADDRESS = 0x40000
 DEFAULT_SERIAL_PORT = 'COM11'
@@ -63,12 +64,8 @@ import os
 import os.path
 import tempfile
 
-if(os.name == 'posix'): # termios only exists on Linux
+if(os.name == 'posix'):
   DEFAULT_SERIAL_PORT   = '/dev/ttyUSB0'
-  try:
-    import termios
-  except ModuleNotFoundError:
-    errorexit('Please install the \'termios\' module with pip')
 
 try:
   import serial
@@ -144,23 +141,6 @@ else:
       crc32.update(byte)
       byte = f.read(1)
 
-resetPort = False
-
-if(os.name == 'posix'):
-  if resetPort == False:
-  # to be able to suppress DTR, we need this
-    f = open(serialport)
-    attrs = termios.tcgetattr(f)
-    attrs[2] = attrs[2] & ~termios.HUPCL
-    termios.tcsetattr(f, termios.TCSAFLUSH, attrs)
-    f.close()
-  else:
-    f = open(serialport)
-    attrs = termios.tcgetattr(f)
-    attrs[2] = attrs[2] | termios.HUPCL
-    termios.tcsetattr(f, termios.TCSAFLUSH, attrs)
-    f.close()
-
 ser = serial.Serial()
 ser.baudrate = baudrate
 ser.port = serialport
@@ -171,8 +151,8 @@ if(os.name == 'nt'):
   ser.setDTR(False)
   ser.setRTS(False)
 if(os.name == 'posix'):
-  ser.rtscts = False            # not setting to false prevents communication
-  ser.dsrdtr = resetPort        # determines if Agon resets or not
+  ser.rtscts = False        # not setting to false prevents communication
+  ser.dsrdtr = False        # determines if Agon resets or not
 
 try:
     ser.open()
@@ -187,7 +167,7 @@ try:
       sent = crc16(startrecord.strip().encode('ascii'))
       ser.write(hex(sent)[2:].zfill(4).upper().encode())
 
-      time.sleep(0.3)
+      time.sleep(0.5)
       if ser.in_waiting:
         ret = int.from_bytes(ser.read(2), "little")
         sent = crc16(startrecord.encode('ascii'))         
