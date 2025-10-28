@@ -1,7 +1,7 @@
 ## Title:       send.py
 ## Author:      Jeroen Venema
 ## Created:     25/10/2022
-## Last update: 22/10/2025
+## Last update: 28/10/2025
 ##
 ## Edited by Steve Lovejoy for linux DTR issue. 
 ##
@@ -16,22 +16,16 @@
 ## 11/09/2023 Wait time variable introduced for handling PC serial drivers with low buffer memory
 ## 29/01/2024 OS-specific serial settings to prevent board reset upon opening of serial port
 ## 22/10/2025 Removed termios, several issues with MacOS. Tested correct DTR on Win/Linux/MacOS
+## 28/10/2025 Improved autodetection of usb/serial interfaces
 
 DEFAULT_START_ADDRESS = 0x40000
-DEFAULT_SERIAL_PORT = 'COM11'
 DEFAULT_BAUDRATE      = 115200
 DEFAULT_LINE_WAITTIME = 0.000      ## A value of +/- 0.003 Helps PC serial drivers with low buffer memory
 IHEXBYTELENGTH = 255
 WAITCRC = True  # request extended format, if available from the VDP
 
-def errorexit(message):
-  print(message)
-  print('Press ENTER to continue')
-  input()
-  exit()
-  return
-
 def hexchecksum(hexstring):
+    bytestring = b"" # Just to shut up the lexical analyzer
     result = hexstring[1:]    
     checksum = 0
     msn = True
@@ -64,22 +58,19 @@ import os
 import os.path
 import tempfile
 
-if(os.name == 'posix'):
-  DEFAULT_SERIAL_PORT   = '/dev/ttyUSB0'
-
 try:
   import serial
   import serial.tools.list_ports
 except ModuleNotFoundError:
-  errorexit('Please install the \'pyserial\' module with pip')
+  sys.exit('Error: missing \'pyserial\' module')
 try:
   from intelhex import IntelHex
 except ModuleNotFoundError:
-  errorexit('Please install the \'intelhex\' module with pip')
+  sys.exit('Error: missing \'intelhex\' module')
 try:
   import crcmod
 except ModuleNotFoundError:
-  errorexit('Please install the \'crcmod\' module with pip')
+  sys.exit('Error: missing \'crcmod\' module')
 
 crc16 = crcmod.mkCrcFun(0x18005, 0x0, False, 0x0)
 crc32 = crcmod.crcmod.predefined.Crc('crc-32')
@@ -92,8 +83,19 @@ if not os.path.isfile(sys.argv[1]):
 
 if len(sys.argv) == 2:
   serialports = serial.tools.list_ports.comports()
+  # Filter out common non-usb serial devices from the autodetect list
+  ports = []
+  for port in serialports:
+    ports.append(str(port))
+  serialports = list(filter(lambda x: "usb" in x.lower(), ports))
+  # Error out if autodetection still results in multiple ports
   if len(serialports) > 1:
-    sys.exit("Multiple serial ports present - cannot automatically select");
+    print("Multiple serial ports present - cannot automatically select:")
+    for serialport in serialports:
+      print(serialport)
+    sys.exit()
+  if len(serialports) == 0:
+    sys.exit("No usb serial port found")
   serialport = str(serialports[0]).split(" ")[0]
 if len(sys.argv) >= 3:
   serialport = sys.argv[2]
@@ -172,7 +174,7 @@ try:
         ret = int.from_bytes(ser.read(2), "little")
         sent = crc16(startrecord.encode('ascii'))         
         if ret != sent:
-          errorexit("Extended header sending error, aborting")
+          sys.exit("Extended header sending error, aborting")
       else:
         WAITCRC = False # Target VDP has no extended code built in
         print('VDP doesn\'t support extended CRC16/32; sending regular format')
@@ -207,7 +209,7 @@ try:
 
     ser.close()
 except serial.SerialException:
-    errorexit('Error: serial port unavailable')
+    sys.exit('Error: serial port unavailable')
 
 file.close()
 
