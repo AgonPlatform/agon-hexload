@@ -1,7 +1,7 @@
 ## Title:       send.py
 ## Author:      Jeroen Venema
 ## Created:     25/10/2022
-## Last update: 28/10/2025
+## Last update: 30/10/2025
 ##
 ## Edited by Steve Lovejoy for linux DTR issue. 
 ##
@@ -17,6 +17,7 @@
 ## 29/01/2024 OS-specific serial settings to prevent board reset upon opening of serial port
 ## 22/10/2025 Removed termios, several issues with MacOS. Tested correct DTR on Win/Linux/MacOS
 ## 28/10/2025 Improved autodetection of usb/serial interfaces
+## 30/10/2025 Script accepts 'auto' as PORT name
 
 DEFAULT_START_ADDRESS = 0x40000
 DEFAULT_BAUDRATE      = 115200
@@ -76,12 +77,14 @@ crc16 = crcmod.mkCrcFun(0x18005, 0x0, False, 0x0)
 crc32 = crcmod.crcmod.predefined.Crc('crc-32')
 
 if len(sys.argv) == 1 or len(sys.argv) >4:
-  sys.exit('Usage: send.py FILENAME <PORT> <BAUDRATE>')
+  print('Usage: send.py FILENAME <PORT> <BAUDRATE>\n')
+  print('PORT autodetection: leave PORT empty or specify auto')
+  sys.exit()
 
 if not os.path.isfile(sys.argv[1]):
   sys.exit(f'Error: file \'{sys.argv[1]}\' not found')
 
-if len(sys.argv) == 2:
+if len(sys.argv) == 2 or (len(sys.argv) > 2 and sys.argv[2] == "auto"):
   serialports = serial.tools.list_ports.comports()
   # Filter out common non-usb serial devices from the autodetect list
   ports = []
@@ -97,7 +100,8 @@ if len(sys.argv) == 2:
   if len(serialports) == 0:
     sys.exit("No usb serial port found")
   serialport = str(serialports[0]).split(" ")[0]
-if len(sys.argv) >= 3:
+  #if len(sys.argv) >= 3:
+else:
   serialport = sys.argv[2]
 
 if len(sys.argv) == 4:
